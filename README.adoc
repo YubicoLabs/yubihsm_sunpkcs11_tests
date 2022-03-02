@@ -1,0 +1,28 @@
+== YubiHSM SunPKCS11 Test
+
+This software tests using the most common functions in the YubiHSM as a JAVA program using SunPKCS11 provider.
+
+=== Build
+
+To build these tests, run
+
+```
+$ ./gradlew build
+```
+
+=== Run
+
+1. Generate test keys on the YubiHSM so that SunPKCS11 provider can find them (An asymmetric key and it's X509
+certificate having the same ObjectID) by running the setup script `src/main/resources/test_setup.sh`
+
+```
+$ ./src/main/resources/test_setup.sh PATH/TO/yubishm-shell
+```
+
+2. Create the file containing the connector to the yubihsm (see https://developers.yubico.com/yubihsm-shell/yubihsm-pkcs11.html)
+
+3. Run the program
+
+```
+$ ./gradlew runMain -Pargs="PATH/TO/yubihsm_pkcs11.so"
+```

@@ -1,0 +1,38 @@
+plugins {
+    id 'java'
+}
+
+group 'com.yubico'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    compile ('org.bouncycastle:bcpkix-jdk15on:1.61')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+apply plugin: 'application'
+mainClassName = 'Main'
+apply plugin: 'java'
+
+ext.javaMainClass = "Main"
+if (project.hasProperty("args")) {
+    ext.cmdargs = project.getProperty("args")
+} else {
+    ext.cmdargs = ""
+}
+task runMain(type: JavaExec) {
+    group = "Execution"
+    description = "Run the main class with JavaExecTask"
+    classpath = sourceSets.main.runtimeClasspath
+    main = javaMainClass
+    args cmdargs.split()
+}
