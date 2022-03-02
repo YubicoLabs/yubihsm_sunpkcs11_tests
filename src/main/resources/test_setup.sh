@@ -42,6 +42,13 @@ echo "====================== RSA keys ===================== "
 echo "RSA2048...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_rsa2048 -d 1 -c sign-pkcs,sign-pss,decrypt-pkcs,decrypt-oaep,sign-attestation-certificate -A rsa2048"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
+set +e
+$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 2>&1 > /dev/null # Some YubiHSMs does not have default attestation certificate
+skip_attestation=$?
+set -e
+if [ $skip_attestation -ne 0 ]; then
+  exit
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
 run "openssl x509 -in cert.pem -out cert.der -outform DER"
 run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
