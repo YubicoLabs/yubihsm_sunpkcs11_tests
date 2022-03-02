@@ -1,9 +1,11 @@
 #!/bin/bash
 
-if [ "$#" -ne 1 ]; then
-  BIN="yubihsm-shell"
+if [ "$#" -eq 1 ]; then
+  BIN=$1 # path to the yubihsm-shell command line tool - using default connector
+elif [ "$#" -gt 1 ]; then
+  BIN="$1 -C $2" # path to the yubihsm-shell command line tool - using specified connector
 else
-  BIN=$1 # path to the yubihsm-shell command line tool
+  BIN="yubihsm-shell"
 fi
 
 run () {
