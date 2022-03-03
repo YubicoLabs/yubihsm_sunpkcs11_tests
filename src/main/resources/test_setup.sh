@@ -44,14 +44,14 @@ run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_r
 keyid=$(tail -1 resp.txt | awk '{print $4}')
 set +e
 $BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 2>&1 > /dev/null # Some YubiHSMs does not have default attestation certificate
-skip_attestation=$?
+default_attestation=$?
 set -e
-if [ $skip_attestation -ne 0 ]; then
-  exit
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
 fi
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_rsa2048_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -61,9 +61,12 @@ echo "RSA2048.... DONE"
 echo "RSA3072...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_rsa3072 -d 1 -c sign-pkcs,sign-pss,decrypt-pkcs,decrypt-oaep,sign-attestation-certificate -A rsa3072"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_rsa3072_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -73,9 +76,12 @@ echo "RSA3072.... DONE"
 echo "RSA4096...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_rsa4096 -d 1 -c sign-pkcs,sign-pss,decrypt-pkcs,decrypt-oaep,sign-attestation-certificate -A rsa4096"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_rsa4096_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -86,9 +92,12 @@ echo "====================== EC keys ===================== "
 #echo "ECP224...."
 #run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecp224 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecp224"
 #keyid=$(tail -1 resp.txt | awk '{print $4}')
-#run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-#run "openssl x509 -in cert.pem -out cert.der -outform DER"
-#run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+#if [ $default_attestation -eq 0 ]; then
+#  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+#else
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+#fi
 #run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 #run "$BIN -p password -a delete-object -i $keyid -t opaque"
 #run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecp224_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -98,9 +107,12 @@ echo "====================== EC keys ===================== "
 echo "ECP256...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecp256 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecp256"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecp256_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -110,9 +122,12 @@ echo "ECP256.... DONE"
 echo "ECP384...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecp384 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecp384"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecp384_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -122,9 +137,12 @@ echo "ECP384.... DONE"
 echo "ECP521...."
 run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecp521 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecp521"
 keyid=$(tail -1 resp.txt | awk '{print $4}')
-run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-run "openssl x509 -in cert.pem -out cert.der -outform DER"
-run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+if [ $default_attestation -eq 0 ]; then
+  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+else
+  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+fi
 run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 run "$BIN -p password -a delete-object -i $keyid -t opaque"
 run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecp521_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -134,9 +152,12 @@ echo "ECP521.... DONE"
 #echo "ECK256...."
 #run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_eck256 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A eck256"
 #keyid=$(tail -1 resp.txt | awk '{print $4}')
-#run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-#run "openssl x509 -in cert.pem -out cert.der -outform DER"
-#run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+#if [ $default_attestation -eq 0 ]; then
+#  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+#else
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+#fi
 #run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 #run "$BIN -p password -a delete-object -i $keyid -t opaque"
 #run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_eck256_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -146,9 +167,12 @@ echo "ECP521.... DONE"
 #echo "Brainpool256...."
 #run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecbp256 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecbp256"
 #keyid=$(tail -1 resp.txt | awk '{print $4}')
-#run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-#run "openssl x509 -in cert.pem -out cert.der -outform DER"
-#run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+#if [ $default_attestation -eq 0 ]; then
+#  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+#else
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+#fi
 #run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 #run "$BIN -p password -a delete-object -i $keyid -t opaque"
 #run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecbp256_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -158,9 +182,12 @@ echo "ECP521.... DONE"
 #echo "Brainpool384...."
 #run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecbp384 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecbp384"
 #keyid=$(tail -1 resp.txt | awk '{print $4}')
-#run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-#run "openssl x509 -in cert.pem -out cert.der -outform DER"
-#run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+#if [ $default_attestation -eq 0 ]; then
+#  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+#else
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+#fi
 #run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 #run "$BIN -p password -a delete-object -i $keyid -t opaque"
 #run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecbp384_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
@@ -170,9 +197,12 @@ echo "ECP521.... DONE"
 #echo "Brainpool512...."
 #run_with_resp "$BIN -p password -a generate-asymmetric-key -i 0 -l pkcs11_test_ecbp512 -d 5,8,13 -c sign-ecdsa,derive-ecdh,sign-attestation-certificate -A ecbp512"
 #keyid=$(tail -1 resp.txt | awk '{print $4}')
-#run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
-#run "openssl x509 -in cert.pem -out cert.der -outform DER"
-#run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --in cert.der"
+#if [ $default_attestation -eq 0 ]; then
+#  run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id 0 --out cert.pem"
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in cert.pem"
+#else
+#  run "$BIN -p password -a put-opaque -i $keyid -l template_cert -A opaque-x509-certificate --informat=PEM --in x509template.pem"
+#fi
 #run "$BIN -p password -a sign-attestation-certificate -i $keyid --attestation-id=$keyid --out selfsigned_cert.pem"
 #run "$BIN -p password -a delete-object -i $keyid -t opaque"
 #run "$BIN -p password -a put-opaque -i $keyid -l pkcs11_test_ecbp512_cert -A opaque-x509-certificate --informat=PEM --in selfsigned_cert.pem"
