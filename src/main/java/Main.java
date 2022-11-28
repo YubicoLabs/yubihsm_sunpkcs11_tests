@@ -1,20 +1,51 @@
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.DERObjectIdentifier;
+import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.jce.X509Principal;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.util.io.pem.PemReader;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
+import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
 
 import javax.crypto.*;
-import java.io.FileWriter;
-import java.io.IOException;
+import javax.naming.NamingException;
+import java.io.*;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
-import java.util.Enumeration;
+import java.security.spec.RSAKeyGenParameterSpec;
+import java.util.*;
 
 public class Main {
     private static String PIN = "0001password";
     private static String SUNPKCS11_CONFIG_FILE = "src/main/resources/yubihsm_pkcs11.cfg";
+
+
+    private static final String mockX509Cert = "MIIC+jCCAeKgAwIBAgIGAWbt9mc3MA0GCSqGSIb3DQEBBQUAMD4xPDA6BgNVBAMM\n" +
+                                               "M0R1bW15IGNlcnRpZmljYXRlIGNyZWF0ZWQgYnkgYSBDRVNlQ29yZSBhcHBsaWNh\n" +
+                                               "dGlvbjAeFw0xODExMDcxMTM3MjBaFw00ODEwMzExMTM3MjBaMD4xPDA6BgNVBAMM\n" +
+                                               "M0R1bW15IGNlcnRpZmljYXRlIGNyZWF0ZWQgYnkgYSBDRVNlQ29yZSBhcHBsaWNh\n" +
+                                               "dGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMTxMBMtwHJCzNHi\n" +
+                                               "d0GszdXM49jQdEZOuaLK1hyIjpuhRImJYbdvmF5cYa2suR2yw6DygWGFLafqVEuL\n" +
+                                               "dXvnib3r0jBX2w7ZSrPWuJ592QUgNllHCvNG/dNgwLfCVOr9fs1ifJaa09gtQ2EG\n" +
+                                               "3iV7j3AMxb7rc8x4d3nsJad+UPCyqB3HXGDRLbOT38zI72zhXm4BqiCMt6+2rcPE\n" +
+                                               "+nneNiTMVjrGwzbZkCak6xnwq8/tLTtvD0+yPLQdKb4NaQfXPmYNTrzTmvYmVD8P\n" +
+                                               "0bIUo/CoXIh0BkJXwHzX7J9nDW9Qd7BR2Q2vbUaou/STlWQooqoTnVnEK8zvAXkl\n" +
+                                               "ubqSUPMCAwEAATANBgkqhkiG9w0BAQUFAAOCAQEAGXwmRWewOcbPV/Jx6wkNDOvE\n" +
+                                               "oo4bieBqeRyU/XfDYbuevfNSBnbQktThl1pR21hrJ2l9qV3D1AJDKck/x74hyjl9\n" +
+                                               "mh37eqbPAdfx3yY7vN03RYWr12fW0kLJA9bsm0jYdJN4BHV/zCXlSqPS0The+Zfg\n" +
+                                               "eVCiQCnEZx/z1jfxwIIg6N8Y7luPWIi36XsGqI75IhkJFw8Jup5HIB4p4P0txinm\n" +
+                                               "hxzAwAjKm7yCiBA5oxX1fvSPdlwMb9mcO7qC5wKrsMyuzIpllBbGaCRFCcAtu9Zu\n" +
+                                               "MvBJNrMLPK3bz4QvT5dYW/cXcjJbnIDqQKqSVV6feYk3iyS07HkaPGP3rxGpdQ==";
+
 
     public static void main(String[] args) {
 
@@ -25,6 +56,14 @@ public class Main {
         String library = args[0];
         String slotListIndex = "0";
         String pkcs11Config = "name=" + name + "\nlibrary=" + library + "\nslot=" + slotListIndex;
+        pkcs11Config += "\nattributes(*,CKO_PRIVATE_KEY,CKK_RSA) = {\n" +
+                        "  CKA_SIGN = true\n" +
+                        "  CKA_DECRYPT = true\n" +
+                        "}";
+        pkcs11Config += "\nattributes(*,CKO_PRIVATE_KEY,CKK_EC) = {\n" +
+                        "  CKA_SIGN = true\n" +
+                        "  CKA_DERIVE = true\n" +
+                        "}";
 
         // Java <= 8
         /*java.io.ByteArrayInputStream pkcs11ConfigStream = new java.io.ByteArrayInputStream(pkcs11Config.getBytes());
@@ -60,7 +99,84 @@ public class Main {
             System.exit(4);
         }
 
-        listProviderAlgos(provider);
+
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            X509Certificate cert = getCertificate(keyPair, true, null);
+            ks.setKeyEntry("rsakey_2048", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+            keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(4096);
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, true, null);
+            ks.setKeyEntry("rsakey_4096", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+            keyPairGenerator = KeyPairGenerator.getInstance("EC");
+            keyPairGenerator.initialize(new ECGenParameterSpec("secp224r1"));
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, false,null);
+            ks.setKeyEntry("ec_secp224r1_key", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+            keyPairGenerator = KeyPairGenerator.getInstance("EC");
+            keyPairGenerator.initialize(new ECGenParameterSpec("secp384r1"));
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, false,null);
+            ks.setKeyEntry("ec_secp384r1_key", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("Failed to generate RSA keys");
+            e.printStackTrace();
+            System.exit(100);
+        } catch (CertificateEncodingException | InvalidKeyException | SignatureException | NoSuchProviderException e) {
+            System.err.println("Failed to construct X509Certificate");
+            e.printStackTrace();
+            System.exit(200);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to import keyentry");
+            e.printStackTrace();
+            System.exit(300);
+        } catch (InvalidAlgorithmParameterException e) {
+            System.err.println("Failed to generate EC keys");
+            e.printStackTrace();
+            System.exit(300);
+        }
+
+
+/*
+
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", provider);
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+            X509Certificate cert = convertToX509Certificate();
+            System.out.println("--- cert==null? " + (cert==null));
+            ks.setKeyEntry("rsakey", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+
+            //final X509Certificate cert = getCertificate(keyPair, provider);
+
+            //ks.setCertificateEntry("rsakey", cert);
+
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("Failed to generate RSA keys");
+            e.printStackTrace();
+            System.exit(100);
+        } catch (CertificateException  e) {
+            System.err.println("Failed to construct X509Certificate");
+            e.printStackTrace();
+            System.exit(200);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to import keyentry");
+            e.printStackTrace();
+            System.exit(300);
+        }
+
+*/
+        //listProviderAlgos(provider);
 
         Enumeration<String> aliases = getAllAliases(ks);
         while (aliases.hasMoreElements()) {
@@ -69,6 +185,21 @@ public class Main {
             PrivateKey privKey = getPrivKey(ks, alias);
             PublicKey pubKey = getPubKey(ks, alias);
             performTests(privKey, pubKey, getCurveFromAlias(alias), provider);
+        }
+
+        try {
+            ks.deleteEntry("rsakey_2048");
+            System.out.println("----- Deleted rsakey_2048");
+            ks.deleteEntry("rsakey_4096");
+            System.out.println("----- Deleted rsakey_4096");
+            ks.deleteEntry("ec_secp224r1_key");
+            System.out.println("----- Deleted ec_secp224r1_key");
+            ks.deleteEntry("ec_secp384r1_key");
+            System.out.println("----- Deleted ec_secp384r1_key");
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to delete key");
+            e.printStackTrace();
+            System.exit(500);
         }
 
         System.out.println("DONE!");
@@ -87,10 +218,12 @@ public class Main {
         while (aliases.hasMoreElements()) { // token has a single certificate
             String alias = aliases.nextElement();
             System.out.println("*** key alias: " + alias + " : " + ks.getKey(alias, PIN.toCharArray()).getAlgorithm() + " : " + ks.getKey(alias,
-                                                                                                                                          PIN.toCharArray()).getFormat());
+                                                                                                                                          PIN.toCharArray())
+                                                                                                                                  .getFormat());
         }
         System.out.println("Printing all available keys successful.");
     }
+
     private static Enumeration<String> getAllAliases(KeyStore ks) {
         try {
             return ks.aliases();
@@ -103,7 +236,7 @@ public class Main {
 
     private static PrivateKey getPrivKey(KeyStore ks, String alias) {
         try {
-            return  (PrivateKey) (ks.getKey(alias, null));
+            return (PrivateKey) (ks.getKey(alias, null));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(4);
@@ -123,7 +256,7 @@ public class Main {
     }
 
     private static void performTests(PrivateKey privKey, PublicKey pubKey, String curve, Provider provider) {
-        if(privKey.getAlgorithm().equals("RSA")) {
+        if (privKey.getAlgorithm().equals("RSA")) {
             encryptionRSAPkcs1(pubKey, privKey, provider);
             signPkcs1(pubKey, privKey, "SHA1withRSA", provider);
             signPkcs1(pubKey, privKey, "SHA256withRSA", provider);
@@ -131,14 +264,14 @@ public class Main {
             signPkcs1(pubKey, privKey, "SHA512withRSA", provider);
             signPss(pubKey, privKey, "SHA1withRSA/PSS", "SHA-1", provider);
             signPss(pubKey, privKey, "SHA256withRSA/PSS", "SHA-256", provider);
-            signPss(pubKey, privKey, "SHA384withRSA/PSS","SHA-384", provider);
+            signPss(pubKey, privKey, "SHA384withRSA/PSS", "SHA-384", provider);
             signPss(pubKey, privKey, "SHA512withRSA/PSS", "SHA-512", provider);
-        } else if(privKey.getAlgorithm().equals("EC")) {
+        } else if (privKey.getAlgorithm().equals("EC")) {
             signEcdsa(pubKey, privKey, "SHA1withECDSA", provider);
             signEcdsa(pubKey, privKey, "SHA256withECDSA", provider);
             signEcdsa(pubKey, privKey, "SHA384withECDSA", provider);
             signEcdsa(pubKey, privKey, "SHA512withECDSA", provider);
-            if(curve != null) {
+            if (curve != null) {
                 deriveEcdh(curve, privKey, pubKey, provider);
             }
         }
@@ -309,15 +442,89 @@ public class Main {
     }
 
     private static String getCurveFromAlias(String alias) {
-        if(alias.contains("ecp256")) {
+        if (alias.contains("ecp256")) {
             return "secp256r1";
         }
-        if(alias.contains("ecp384")) {
+        if (alias.contains("ecp384")) {
             return "secp384r1";
         }
-        if(alias.contains("ecp521")) {
+        if (alias.contains("ecp521")) {
             return "secp521r1";
         }
         return null;
+    }
+
+
+    private static X509Certificate getCertificate(KeyPair keypair, boolean isRsa, Provider provider)
+            throws NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, InvalidKeyException, SignatureException {
+        final UUID uuid = new UUID(3, 3);
+        final X509V3CertificateGenerator generator = new X509V3CertificateGenerator();
+
+        final Calendar calendar = Calendar.getInstance();
+
+        final Vector<ASN1ObjectIdentifier> attrsVector = new Vector<ASN1ObjectIdentifier>();
+        final Hashtable<ASN1ObjectIdentifier, String> attrsHash = new Hashtable<ASN1ObjectIdentifier, String>();
+
+        attrsHash.put(X509Principal.CN, "rsakeyCert");
+        attrsVector.add(X509Principal.CN);
+
+        generator.setSubjectDN(new X509Principal(attrsVector, attrsHash));
+
+        calendar.add(Calendar.HOUR, -1);
+        generator.setNotBefore(calendar.getTime());
+
+        calendar.add(Calendar.HOUR, 100);
+        generator.setNotAfter(calendar.getTime());
+
+        // Reuse the UUID time as a SN
+        generator.setSerialNumber(BigInteger.valueOf(123456789L).abs());
+
+        //generator.addExtension(X509Extensions.AuthorityKeyIdentifier, false,
+        //                       new AuthorityKeyIdentifierStructure(caCert));
+
+        //generator.addExtension(X509Extensions.SubjectKeyIdentifier, false,
+        //                       new SubjectKeyIdentifierStructure(sshKey.getKey()));
+
+        StringBuilder hostnameAndUUIDBuilder = new StringBuilder("local");
+        hostnameAndUUIDBuilder.append(':');
+        hostnameAndUUIDBuilder.append(uuid.toString());
+        generator.addExtension(X509Extensions.IssuingDistributionPoint, false,
+                               hostnameAndUUIDBuilder.toString().getBytes());
+
+        // Not a CA
+        generator.addExtension(X509Extensions.BasicConstraints, true,
+                               new BasicConstraints(false));
+
+        generator.setIssuerDN(new X509Principal(attrsVector, attrsHash));
+        generator.setPublicKey(keypair.getPublic());
+        if(isRsa) {
+            generator.setSignatureAlgorithm("SHA1withRSA");
+        } else {
+            generator.setSignatureAlgorithm("SHA256withECDSA");
+        }
+
+        if(provider == null) {
+            return generator.generate(keypair.getPrivate());
+        } else {
+            return generator.generate(keypair.getPrivate(), provider.getName());
+        }
+    }
+
+    private static X509Certificate parseCertificate() throws CertificateException {
+        byte [] decoded = Base64.getDecoder().decode(mockX509Cert);
+        return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(decoded));
+    }
+
+    private static X509Certificate convertStringToX509Cert() throws CertificateException, IOException {
+        InputStream targetStream = new ByteArrayInputStream(mockX509Cert.getBytes());
+        System.out.println("-------- targetStream == NULL? " + (targetStream == null) + "   .   available: " + targetStream.available());
+        return (X509Certificate) CertificateFactory.getInstance("X509").generateCertificate(targetStream);
+    }
+
+    private static X509Certificate convertToX509Certificate() throws CertificateException {
+        CertificateFactory fac=CertificateFactory.getInstance("X509");
+        ByteArrayInputStream in=new ByteArrayInputStream(mockX509Cert.getBytes());
+        X509Certificate cert=(X509Certificate)fac.generateCertificate(in);
+        return cert;
     }
 }
