@@ -100,107 +100,20 @@ public class Main {
         }
 
 
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            KeyPair keyPair = keyPairGenerator.generateKeyPair();
-            X509Certificate cert = getCertificate(keyPair, true, null);
-            ks.setKeyEntry("rsakey_2048", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
-
-            keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(4096);
-            keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, true, null);
-            ks.setKeyEntry("rsakey_4096", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
-
-            keyPairGenerator = KeyPairGenerator.getInstance("EC");
-            keyPairGenerator.initialize(new ECGenParameterSpec("secp224r1"));
-            keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, false,null);
-            ks.setKeyEntry("ec_secp224r1_key", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
-
-            keyPairGenerator = KeyPairGenerator.getInstance("EC");
-            keyPairGenerator.initialize(new ECGenParameterSpec("secp384r1"));
-            keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, false,null);
-            ks.setKeyEntry("ec_secp384r1_key", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+        createAndRunRsaKeyTest(ks, pass, "rsakey_2048", 2048, provider);
+        createAndRunRsaKeyTest(ks, pass, "rsakey_4096", 4096, provider);
+        runTest(ks,"pkcs11_test_rsa2048_cert", provider); // keys created by the setup script
+        runTest(ks,"pkcs11_test_rsa3072_cert", provider); // keys created by the setup script
+        runTest(ks,"pkcs11_test_rsa4096_cert", provider); // keys created by the setup script
 
 
-        } catch (NoSuchAlgorithmException e) {
-            System.err.println("Failed to generate RSA keys");
-            e.printStackTrace();
-            System.exit(100);
-        } catch (CertificateEncodingException | InvalidKeyException | SignatureException | NoSuchProviderException e) {
-            System.err.println("Failed to construct X509Certificate");
-            e.printStackTrace();
-            System.exit(200);
-        } catch (KeyStoreException e) {
-            System.err.println("Failed to import keyentry");
-            e.printStackTrace();
-            System.exit(300);
-        } catch (InvalidAlgorithmParameterException e) {
-            System.err.println("Failed to generate EC keys");
-            e.printStackTrace();
-            System.exit(300);
-        }
-
-
-/*
-
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", provider);
-            keyPairGenerator.initialize(2048);
-            KeyPair keyPair = keyPairGenerator.generateKeyPair();
-
-            X509Certificate cert = convertToX509Certificate();
-            System.out.println("--- cert==null? " + (cert==null));
-            ks.setKeyEntry("rsakey", keyPair.getPrivate(), pass, new X509Certificate[]{cert});
-
-
-            //final X509Certificate cert = getCertificate(keyPair, provider);
-
-            //ks.setCertificateEntry("rsakey", cert);
-
-        } catch (NoSuchAlgorithmException e) {
-            System.err.println("Failed to generate RSA keys");
-            e.printStackTrace();
-            System.exit(100);
-        } catch (CertificateException  e) {
-            System.err.println("Failed to construct X509Certificate");
-            e.printStackTrace();
-            System.exit(200);
-        } catch (KeyStoreException e) {
-            System.err.println("Failed to import keyentry");
-            e.printStackTrace();
-            System.exit(300);
-        }
-
-*/
-        //listProviderAlgos(provider);
-
-        Enumeration<String> aliases = getAllAliases(ks);
-        while (aliases.hasMoreElements()) {
-            String alias = aliases.nextElement();
-            System.out.println("----- " + alias + ":");
-            PrivateKey privKey = getPrivKey(ks, alias);
-            PublicKey pubKey = getPubKey(ks, alias);
-            performTests(privKey, pubKey, getCurveFromAlias(alias), provider);
-        }
-
-        try {
-            ks.deleteEntry("rsakey_2048");
-            System.out.println("----- Deleted rsakey_2048");
-            ks.deleteEntry("rsakey_4096");
-            System.out.println("----- Deleted rsakey_4096");
-            ks.deleteEntry("ec_secp224r1_key");
-            System.out.println("----- Deleted ec_secp224r1_key");
-            ks.deleteEntry("ec_secp384r1_key");
-            System.out.println("----- Deleted ec_secp384r1_key");
-        } catch (KeyStoreException e) {
-            System.err.println("Failed to delete key");
-            e.printStackTrace();
-            System.exit(500);
-        }
+        createAndRunEcKeyTest(ks, pass, "ec_secp224r1_key", provider);
+        createAndRunEcKeyTest(ks, pass,
+          "ec_secp384r1_key_b7735ac53c9bb3a9e8ec548bea91b85f06e501e2dd3af215ef3b716bbd161dc1a58650e730ad3fdee5c4493ff95005656d706b4e5e2bdf33e56d2340ce5b411f", provider);
+        runTest(ks, "pkcs11_test_ecp256_cert", provider); // keys created by the setup script
+        runTest(ks, "pkcs11_test_ecp384_cert", provider); // keys created by the setup script
+        runTest(ks, "pkcs11_test_ecp521_cert", provider); // keys created by the setup script
+        
 
         System.out.println("DONE!");
     }
@@ -222,6 +135,140 @@ public class Main {
                                                                                                                                   .getFormat());
         }
         System.out.println("Printing all available keys successful.");
+    }
+
+    private static void createAndRunRsaKeyTest(KeyStore ks, char[] pass, String alias, int keySize, Provider provider) {
+        KeyPairGenerator keyPairGenerator;
+        KeyPair keyPair;
+        X509Certificate cert;
+
+        String importAlias = alias + "_imported";
+        String genAlias = alias + "_generated";
+        try {
+            System.out.println("Generating " + importAlias);
+            keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(keySize);
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, true, null);
+            ks.setKeyEntry(importAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+            System.out.println("Generating " + genAlias + " on device");
+            keyPairGenerator = KeyPairGenerator.getInstance("RSA", provider);
+            keyPairGenerator.initialize(keySize);
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, true, provider);
+            ks.setKeyEntry(genAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("Failed to generate RSA keys");
+            e.printStackTrace();
+            System.exit(100);
+        } catch (CertificateEncodingException | InvalidKeyException | SignatureException | NoSuchProviderException e) {
+            System.err.println("Failed to construct X509Certificate");
+            e.printStackTrace();
+            System.exit(200);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to import keyentry");
+            e.printStackTrace();
+            System.exit(300);
+        }
+
+        runTest(ks, importAlias, provider);
+        runTest(ks, genAlias, provider);
+
+        try {
+            ks.deleteEntry(importAlias);
+            System.out.println("----- Deleted " + importAlias);
+            ks.deleteEntry(genAlias);
+            System.out.println("----- Deleted " + genAlias);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to delete key");
+            e.printStackTrace();
+            System.exit(500);
+        }
+
+        if(getPrivKey(ks, importAlias) != null || getPubKey(ks, importAlias) != null) {
+            System.err.println("Key still present after delete: " + importAlias);
+            System.exit(600);
+        }
+        if(getPrivKey(ks, genAlias) != null || getPubKey(ks, genAlias) != null) {
+            System.err.println("Key still present after delete: " + genAlias);
+            System.exit(600);
+        }
+    }
+
+    private static void createAndRunEcKeyTest(KeyStore ks, char[] pass, String alias, Provider provider) {
+        KeyPairGenerator keyPairGenerator;
+        KeyPair keyPair;
+        X509Certificate cert;
+
+        String curve = getCurveFromAlias(alias);
+        String importAlias = alias + "_imported";
+        String genAlias = alias + "_generated";
+        try {
+
+            System.out.println("Generating " + importAlias);
+            keyPairGenerator = KeyPairGenerator.getInstance("EC");
+            keyPairGenerator.initialize(new ECGenParameterSpec(curve));
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, false,null);
+            ks.setKeyEntry(importAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+            System.out.println("Generating " + genAlias + " on device");
+            keyPairGenerator = KeyPairGenerator.getInstance("EC", provider);
+            keyPairGenerator.initialize(new ECGenParameterSpec(curve));
+            keyPair = keyPairGenerator.generateKeyPair();
+            cert = getCertificate(keyPair, false, provider);
+            ks.setKeyEntry(genAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
+
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("Failed to generate RSA keys");
+            e.printStackTrace();
+            System.exit(100);
+        } catch (CertificateEncodingException | InvalidKeyException | SignatureException | NoSuchProviderException e) {
+            System.err.println("Failed to construct X509Certificate");
+            e.printStackTrace();
+            System.exit(200);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to import keyentry");
+            e.printStackTrace();
+            System.exit(300);
+        } catch (InvalidAlgorithmParameterException e) {
+            System.err.println("Failed to generate EC keys");
+            e.printStackTrace();
+            System.exit(300);
+        }
+
+        runTest(ks, importAlias, provider);
+        runTest(ks, genAlias, provider);
+
+        try {
+
+            ks.deleteEntry(importAlias);
+            System.out.println("----- Deleted " + importAlias);
+            ks.deleteEntry(genAlias);
+            System.out.println("----- Deleted " + genAlias);
+        } catch (KeyStoreException e) {
+            System.err.println("Failed to delete key");
+            e.printStackTrace();
+            System.exit(500);
+        }
+
+        if(getPrivKey(ks, importAlias) != null || getPubKey(ks, importAlias) != null) {
+            System.err.println("Key still present after delete: " + importAlias);
+            System.exit(600);
+        }
+        if(getPrivKey(ks, genAlias) != null || getPubKey(ks, genAlias) != null) {
+            System.err.println("Key still present after delete: " + genAlias);
+            System.exit(600);
+        }
+    }
+
+    private static void runTest(KeyStore ks, String alias, Provider provider) {
+        System.out.println("------------- Alias: " + alias);
+        PrivateKey privKey = getPrivKey(ks, alias);
+        PublicKey pubKey = getPubKey(ks, alias);
+        performTests(privKey, pubKey, getCurveFromAlias(alias), provider);
     }
 
     private static Enumeration<String> getAllAliases(KeyStore ks) {
@@ -247,7 +294,9 @@ public class Main {
     private static PublicKey getPubKey(KeyStore ks, String alias) {
         try {
             X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
-            return cert.getPublicKey();
+            if(cert != null) {
+                return cert.getPublicKey();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(5);
@@ -442,13 +491,16 @@ public class Main {
     }
 
     private static String getCurveFromAlias(String alias) {
-        if (alias.contains("ecp256")) {
+        if (alias.contains("ecp224") || alias.contains("secp224")) {
+            return "secp224r1";
+        }
+        if (alias.contains("ecp256") || alias.contains("secp256")) {
             return "secp256r1";
         }
-        if (alias.contains("ecp384")) {
+        if (alias.contains("ecp384") || alias.contains("secp384")) {
             return "secp384r1";
         }
-        if (alias.contains("ecp521")) {
+        if (alias.contains("ecp521") || alias.contains("secp521")) {
             return "secp521r1";
         }
         return null;
@@ -506,6 +558,7 @@ public class Main {
         if(provider == null) {
             return generator.generate(keypair.getPrivate());
         } else {
+            Security.addProvider(provider);
             return generator.generate(keypair.getPrivate(), provider.getName());
         }
     }
