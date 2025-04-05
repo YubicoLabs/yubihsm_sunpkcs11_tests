@@ -1,16 +1,15 @@
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.DERObjectIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.X509Extensions;
 import org.bouncycastle.jce.X509Principal;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.util.io.pem.PemReader;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
-import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
 
 import javax.crypto.*;
-import javax.naming.NamingException;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -21,7 +20,6 @@ import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
-import java.security.spec.RSAKeyGenParameterSpec;
 import java.util.*;
 
 public class Main {
@@ -101,19 +99,22 @@ public class Main {
 
 
         createAndRunRsaKeyTest(ks, pass, "rsakey_2048", 2048, provider);
+        createAndRunRsaKeyTest(ks, pass, "rsakey_3072", 3072, provider);
         createAndRunRsaKeyTest(ks, pass, "rsakey_4096", 4096, provider);
-        runTest(ks,"pkcs11_test_rsa2048_cert", provider); // keys created by the setup script
-        runTest(ks,"pkcs11_test_rsa3072_cert", provider); // keys created by the setup script
-        runTest(ks,"pkcs11_test_rsa4096_cert", provider); // keys created by the setup script
+        runTest(ks,"pkcs11_test_rsa2048-cert", provider); // keys created by the setup script
+        runTest(ks,"pkcs11_test_rsa3072-cert", provider); // keys created by the setup script
+        runTest(ks,"pkcs11_test_rsa4096-cert", provider); // keys created by the setup script
 
 
-        createAndRunEcKeyTest(ks, pass, "ec_secp224r1_key", provider);
+//        String[] ec_keys = {"secp224r1", "secp256r1", "secp384r1", "secp521r1", "brainpoolP256r1", "brainpoolP384r1", "brainpoolP512r1"};
+        String[] ec_curves = {"secp224r1", "secp256r1", "secp384r1", "brainpoolP256r1", "brainpoolP384r1", "brainpoolP512r1"};
+        for (String curve : ec_curves) {
+            createAndRunEcKeyTest(ks, pass, "ec_" + curve + "-key", provider);
+            runTest(ks, "pkcs11_test_" + curve + "-cert", provider); // keys created by the setup script
+        }
+
         createAndRunEcKeyTest(ks, pass,
-          "ec_secp384r1_key_b7735ac53c9bb3a9e8ec548bea91b85f06e501e2dd3af215ef3b716bbd161dc1a58650e730ad3fdee5c4493ff95005656d706b4e5e2bdf33e56d2340ce5b411f", provider);
-        runTest(ks, "pkcs11_test_ecp256_cert", provider); // keys created by the setup script
-        runTest(ks, "pkcs11_test_ecp384_cert", provider); // keys created by the setup script
-        runTest(ks, "pkcs11_test_ecp521_cert", provider); // keys created by the setup script
-        
+                              "ec_secp384r1_key_b7735ac53c9bb3a9e8ec548bea91b85f06e501e2dd3af215ef3b716bbd161dc1a58650e730ad3fdee5c4493ff95005656d706b4e5e2bdf33e56d2340ce5b411f", provider);
 
         System.out.println("DONE!");
     }
@@ -149,14 +150,14 @@ public class Main {
             keyPairGenerator = KeyPairGenerator.getInstance("RSA");
             keyPairGenerator.initialize(keySize);
             keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, true, null);
+            cert = getCertificate(keyPair, null,null);
             ks.setKeyEntry(importAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
 
             System.out.println("Generating " + genAlias + " on device");
             keyPairGenerator = KeyPairGenerator.getInstance("RSA", provider);
             keyPairGenerator.initialize(keySize);
             keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, true, provider);
+            cert = getCertificate(keyPair, null, provider);
             ks.setKeyEntry(genAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
 
         } catch (NoSuchAlgorithmException e) {
@@ -178,9 +179,9 @@ public class Main {
 
         try {
             ks.deleteEntry(importAlias);
-            System.out.println("----- Deleted " + importAlias);
+            System.out.println(importAlias + " deleted");
             ks.deleteEntry(genAlias);
-            System.out.println("----- Deleted " + genAlias);
+            System.out.println(genAlias + " deleted");
         } catch (KeyStoreException e) {
             System.err.println("Failed to delete key");
             e.printStackTrace();
@@ -208,17 +209,22 @@ public class Main {
         try {
 
             System.out.println("Generating " + importAlias);
-            keyPairGenerator = KeyPairGenerator.getInstance("EC");
+            if(curve.equals("secp224r1")) {
+                Security.addProvider(new BouncyCastleProvider());
+                keyPairGenerator = KeyPairGenerator.getInstance("EC", "BC");
+            } else {
+                keyPairGenerator = KeyPairGenerator.getInstance("EC");
+            }
             keyPairGenerator.initialize(new ECGenParameterSpec(curve));
             keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, false,null);
+            cert = getCertificate(keyPair, curve,null);
             ks.setKeyEntry(importAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
 
             System.out.println("Generating " + genAlias + " on device");
             keyPairGenerator = KeyPairGenerator.getInstance("EC", provider);
             keyPairGenerator.initialize(new ECGenParameterSpec(curve));
             keyPair = keyPairGenerator.generateKeyPair();
-            cert = getCertificate(keyPair, false, provider);
+            cert = getCertificate(keyPair, curve, provider);
             ks.setKeyEntry(genAlias, keyPair.getPrivate(), pass, new X509Certificate[]{cert});
 
         } catch (NoSuchAlgorithmException e) {
@@ -245,9 +251,9 @@ public class Main {
         try {
 
             ks.deleteEntry(importAlias);
-            System.out.println("----- Deleted " + importAlias);
+            System.out.println(importAlias + " deleted");
             ks.deleteEntry(genAlias);
-            System.out.println("----- Deleted " + genAlias);
+            System.out.println(genAlias + " deleted");
         } catch (KeyStoreException e) {
             System.err.println("Failed to delete key");
             e.printStackTrace();
@@ -265,7 +271,7 @@ public class Main {
     }
 
     private static void runTest(KeyStore ks, String alias, Provider provider) {
-        System.out.println("------------- Alias: " + alias);
+        System.out.println("============= Alias: " + alias + "=============");
         PrivateKey privKey = getPrivKey(ks, alias);
         PublicKey pubKey = getPubKey(ks, alias);
         performTests(privKey, pubKey, getCurveFromAlias(alias), provider);
@@ -316,25 +322,13 @@ public class Main {
             signPss(pubKey, privKey, "SHA384withRSA/PSS", "SHA-384", provider);
             signPss(pubKey, privKey, "SHA512withRSA/PSS", "SHA-512", provider);
         } else if (privKey.getAlgorithm().equals("EC")) {
-            signEcdsa(pubKey, privKey, "SHA1withECDSA", provider);
-            signEcdsa(pubKey, privKey, "SHA256withECDSA", provider);
-            signEcdsa(pubKey, privKey, "SHA384withECDSA", provider);
-            signEcdsa(pubKey, privKey, "SHA512withECDSA", provider);
+            signEcdsa(pubKey, privKey, "SHA1withECDSA", curve, provider);
+            signEcdsa(pubKey, privKey, "SHA256withECDSA", curve, provider);
+            signEcdsa(pubKey, privKey, "SHA384withECDSA", curve, provider);
+            signEcdsa(pubKey, privKey, "SHA512withECDSA", curve, provider);
             if (curve != null) {
                 deriveEcdh(curve, privKey, pubKey, provider);
             }
-        }
-    }
-
-
-    private static void generateKeyPair(Provider provider) {
-        try {
-            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA", provider);
-            keyGen.initialize(2048);
-            keyGen.generateKeyPair();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            System.exit(16);
         }
     }
 
@@ -427,7 +421,7 @@ public class Main {
         }
     }
 
-    private static void signEcdsa(PublicKey pubKey, PrivateKey privKey, String signAlgo, Provider pkcs11Prov) {
+    private static void signEcdsa(PublicKey pubKey, PrivateKey privKey, String signAlgo, String curve, Provider pkcs11Prov) {
         String data = "TEST 1234";
         byte[] signature = null;
 
@@ -442,12 +436,18 @@ public class Main {
         }
 
         try {
-            Signature sig = Signature.getInstance(signAlgo);
+            Signature sig;
+            if(curve.equals("secp224r1") || curve.equals("brainpoolP256r1") || curve.equals("brainpoolP384r1") || curve.equals("brainpoolP512r1")) {
+                Security.addProvider(new BouncyCastleProvider());
+                sig = Signature.getInstance(signAlgo, "BC");
+            } else {
+                sig = Signature.getInstance(signAlgo);
+            }
             sig.initVerify(pubKey);
             sig.update(data.getBytes());
             Util.assertTrue("Signature verification with " + signAlgo + " failed", sig.verify(signature));
             System.out.println("Signing test with " + signAlgo + " successful");
-        } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException e) {
+        } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException | NoSuchProviderException e) {
             e.printStackTrace();
             System.exit(17);
         }
@@ -456,10 +456,16 @@ public class Main {
     private static void deriveEcdh(String curve, PrivateKey hsmPrivKey, PublicKey hsmPubKey, Provider provider) {
         KeyPair ecExtKeypair = null;
         try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+            KeyPairGenerator generator;
+            if(curve.equals("secp224r1") || curve.equals("brainpoolP256r1") || curve.equals("brainpoolP384r1") || curve.equals("brainpoolP512r1")) {
+                Security.addProvider(new BouncyCastleProvider());
+                generator = KeyPairGenerator.getInstance("EC", "BC");
+            } else {
+                generator = KeyPairGenerator.getInstance("EC");
+            }
             generator.initialize(new ECGenParameterSpec(curve));
             ecExtKeypair = generator.generateKeyPair();
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException e) {
+        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
             e.printStackTrace();
             System.exit(19);
         }
@@ -503,11 +509,21 @@ public class Main {
         if (alias.contains("ecp521") || alias.contains("secp521")) {
             return "secp521r1";
         }
+        if (alias.contains("brainpoolP256")) {
+            return "brainpoolP256r1";
+        }
+        if (alias.contains("brainpoolP384")) {
+            return "brainpoolP384r1";
+        }
+        if (alias.contains("brainpoolP512")) {
+            return "brainpoolP512r1";
+        }
+
         return null;
     }
 
 
-    private static X509Certificate getCertificate(KeyPair keypair, boolean isRsa, Provider provider)
+    private static X509Certificate getCertificate(KeyPair keypair, String ec_curve, Provider provider)
             throws NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, InvalidKeyException, SignatureException {
         final UUID uuid = new UUID(3, 3);
         final X509V3CertificateGenerator generator = new X509V3CertificateGenerator();
@@ -549,6 +565,7 @@ public class Main {
 
         generator.setIssuerDN(new X509Principal(attrsVector, attrsHash));
         generator.setPublicKey(keypair.getPublic());
+        boolean isRsa = ec_curve == null;
         if(isRsa) {
             generator.setSignatureAlgorithm("SHA1withRSA");
         } else {
@@ -556,6 +573,10 @@ public class Main {
         }
 
         if(provider == null) {
+            if(ec_curve != null && ec_curve.equals("secp224r1")) {
+                Security.addProvider(new BouncyCastleProvider());
+                return generator.generate(keypair.getPrivate(), "BC");
+            }
             return generator.generate(keypair.getPrivate());
         } else {
             Security.addProvider(provider);
